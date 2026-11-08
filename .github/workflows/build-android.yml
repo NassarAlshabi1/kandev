@@ -1,0 +1,127 @@
+name: build-android
+
+# Builds the android/arm64 Kandev server (kandev + agentctl) for Termux and
+# packages it as dist/kandev-android-arm64.tar.gz. Run it from the Actions
+# tab (workflow_dispatch). Optionally attach the tarball to a GitHub release
+# by filling in the `release_tag` input (an existing tag name, e.g. v0.99.1).
+#
+# The kandev binary needs cgo (SQLite via mattn/go-sqlite3), so the workflow
+# installs the Android NDK and cross-compiles with the bionic toolchain —
+# the same flow as `make package-android` locally (see
+# docs/public/android-termux.md).
+#
+# This workflow is independent of the maintainer-only `release` pipeline; it
+# never publishes npm packages, Docker images, or desktop installers.
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Existing tag to attach the tarball to (optional, e.g. v0.99.1)"
+        required: false
+        type: string
+
+permissions:
+  contents: write # upload-artifact + optional release attachment
+
+concurrency:
+  group: build-android-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NDK_VERSION: r27c
+  NDK_DIR: /opt/android-ndk-r27c
+
+jobs:
+  build-android-arm64:
+    name: Build android/arm64 (Termux)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: bash
+        working-directory: apps
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6
+        with:
+          fetch-depth: 0 # git describe needs tags for the version stamp
+          persist-credentials: false
+
+      - name: Mark workspace safe for git
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Setup Go
+        uses: actions/setup-go@5064d95ba18d4a9dda7c4cc67adeb03aea1a2a14 # v7.0.0
+        with:
+          go-version-file: apps/backend/go.mod
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@a8198c4bff370c8506180b035930dea56dbd5288 # v5
+        with:
+          version: 9.15.9
+
+      - name: Setup Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: 24
+
+      - name: Cache Android NDK
+        id: ndk-cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ env.NDK_DIR }}
+          key: android-ndk-${{ env.NDK_VERSION }}-linux-x86_64
+
+      - name: Download Android NDK
+        if: steps.ndk-cache.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          curl -L --fail --retry 3 -o /tmp/ndk.zip \
+            "https://dl.google.com/android/repository/android-ndk-${NDK_VERSION}-linux.zip"
+          mkdir -p /opt
+          unzip -q /tmp/ndk.zip -d /opt
+          rm /tmp/ndk.zip
+
+      - name: Export ANDROID_NDK_HOME
+        run: |
+          set -euo pipefail
+          test -x "${NDK_DIR}/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android24-clang" \
+            || { echo "NDK toolchain missing at ${NDK_DIR}" >&2; exit 1; }
+          echo "ANDROID_NDK_HOME=${NDK_DIR}" >> "$GITHUB_ENV"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # `make package-android` chains build-web → sync-embedded-web →
+      # android/arm64 kandev + agentctl → dist tarball. Makefile targets live
+      # at the repo root; run from apps/ so pnpm workspace context is right.
+      - name: Build and package android/arm64
+        working-directory: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          make -s package-android GOFLAGS="-v"
+
+      - name: Verify bundle layout
+        working-directory: ${{ github.workspace }}
+        run: |
+          set -euo pipefail
+          tar -tzf dist/kandev-android-arm64.tar.gz
+          test -s apps/backend/bin/kandev-android-arm64
+          test -s apps/backend/bin/agentctl-android-arm64
+
+      - name: Upload bundle artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: kandev-android-arm64
+          path: dist/kandev-android-arm64.tar.gz
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Attach to release
+        if: inputs.release_tag != ''
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3.0.2
+        with:
+          tag_name: ${{ inputs.release_tag }}
+          files: dist/kandev-android-arm64.tar.gz
+          fail_on_unmatched_files: true
