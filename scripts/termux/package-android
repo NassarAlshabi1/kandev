@@ -1,0 +1,42 @@
+#!/bin/sh
+# Package the android/arm64 kandev + agentctl binaries (built by
+# `make build-android`) into a Termux install tarball at
+# dist/kandev-android-arm64.tar.gz.
+#
+# Bundle layout:
+#   kandev-android-arm64/
+#     bin/kandev          server binary (android/arm64, bionic, API 24+)
+#     bin/agentctl        agent runtime sidecar (android/arm64)
+#     install.sh          Termux installer (run this on the phone)
+#     README-termux.txt   quick-start notes
+set -eu
+
+ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
+BIN_DIR="$ROOT/apps/backend/bin"
+STAGE_ROOT="$ROOT/dist/android"
+STAGE="$STAGE_ROOT/kandev-android-arm64"
+OUT="$ROOT/dist/kandev-android-arm64.tar.gz"
+
+if [ ! -f "$BIN_DIR/kandev-android-arm64" ]; then
+    echo "error: $BIN_DIR/kandev-android-arm64 not found; run 'make build-android' first (needs ANDROID_NDK_HOME)" >&2
+    exit 1
+fi
+if [ ! -f "$BIN_DIR/agentctl-android-arm64" ]; then
+    echo "error: $BIN_DIR/agentctl-android-arm64 not found; run 'make build-android' first" >&2
+    exit 1
+fi
+
+rm -rf "$STAGE"
+mkdir -p "$STAGE/bin"
+cp "$BIN_DIR/kandev-android-arm64" "$STAGE/bin/kandev"
+cp "$BIN_DIR/agentctl-android-arm64" "$STAGE/bin/agentctl"
+cp "$ROOT/scripts/termux/install.sh" "$STAGE/install.sh"
+cp "$ROOT/scripts/termux/README-termux.txt" "$STAGE/README-termux.txt"
+chmod 755 "$STAGE/bin/kandev" "$STAGE/bin/agentctl" "$STAGE/install.sh"
+chmod 644 "$STAGE/README-termux.txt"
+
+mkdir -p "$STAGE_ROOT"
+rm -f "$OUT"
+tar -czf "$OUT" -C "$STAGE_ROOT" kandev-android-arm64
+echo "Packaged $OUT"
+tar -tzf "$OUT"

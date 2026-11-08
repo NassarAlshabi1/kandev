@@ -126,6 +126,10 @@ help:
 	@echo "  build            Build backend and web app"
 	@echo "  build-backend    Build backend binary"
 	@echo "  build-web        Build web app for production"
+	@echo "  build-android    Build web + android/arm64 binaries for Termux (needs ANDROID_NDK_HOME)"
+	@echo "  package-android  Build android/arm64 and package dist/kandev-android-arm64.tar.gz"
+	@echo "  build-android    Build web + android/arm64 binaries for Termux (needs ANDROID_NDK_HOME)"
+	@echo "  package-android  Build android/arm64 and package dist/kandev-android-arm64.tar.gz"
 	@echo "  runtime-bundle   Build the package-manager runtime bundle (deps must exist)"
 	@echo "  desktop-runtime  Build/copy runtime resources for the macOS desktop app"
 	@echo "  desktop-build    Build the macOS Tauri app bundle/DMG"
@@ -428,6 +432,27 @@ service-config: service-cli-check
 build-backend:
 	@printf "$(CYAN)Building backend...$(RESET)\n"
 	@$(MAKE) -C $(BACKEND_DIR) build
+
+#
+# Android (Termux)
+#
+# Cross-compiles the embedded-web backend for android/arm64 and packages a
+# Termux install tarball. Requires ANDROID_NDK_HOME for the kandev binary
+# (cgo/SQLite); agentctl is pure Go. See docs/public/android-termux.md.
+#
+
+.PHONY: build-android
+build-android: build-web sync-embedded-web build-backend-android
+	@printf "\n$(GREEN)$(BOLD)✓ Android build complete!$(RESET)\n"
+
+.PHONY: build-backend-android
+build-backend-android:
+	@printf "$(CYAN)Building android/arm64 backend (kandev + agentctl)...$(RESET)\n"
+	@$(MAKE) -C $(BACKEND_DIR) build-kandev-android-arm64 build-agentctl-android-arm64 GOFLAGS="$(GOFLAGS)"
+
+.PHONY: package-android
+package-android: build-android
+	@scripts/termux/package-android
 
 .PHONY: build-backend-remote-helpers build-backend-linux-helpers
 build-backend-remote-helpers:

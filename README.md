@@ -2,7 +2,7 @@
 
 Manage and run tasks in parallel. Orchestrate agents. Review changes. Ship value.
 
-[Features](docs/features.md) | [Workflows](docs/workflow-tips.md) | [Run as a Service](docs/run-as-a-service.md) | [Mobile Access](docs/public/mobile-remote-access.md) | [Debug Logs](docs/debug-logs.md) | [Roadmap](docs/roadmap.md) | [Contributing](CONTRIBUTING.md) | [Architecture](docs/ARCHITECTURE.md) | [Discord](https://discord.gg/gWdCPGcFCD)
+[Features](docs/features.md) | [Workflows](docs/workflow-tips.md) | [Run as a Service](docs/run-as-a-service.md) | [Mobile Access](docs/public/mobile-remote-access.md) | [Android (Termux)](docs/public/android-termux.md) | [Debug Logs](docs/debug-logs.md) | [Roadmap](docs/roadmap.md) | [Contributing](CONTRIBUTING.md) | [Architecture](docs/ARCHITECTURE.md) | [Discord](https://discord.gg/gWdCPGcFCD)
 
 <p align="center">
   <img src="docs/screenshots/readme-intro.gif" alt="Kandev Demo">

@@ -314,6 +314,41 @@ build-agentctl-darwin-amd64:
 	$(GO_DARWIN_AMD64) $(GO) build -trimpath $(GOFLAGS) -ldflags "$(LDFLAGS)" -o $(BUILD_DIR)/agentctl-darwin-amd64 ./cmd/agentctl
 	$(call adhoc_sign_darwin,$(BUILD_DIR)/agentctl-darwin-amd64)
 
+#
+# Android (Termux) targets. The kandev server uses SQLite via mattn/go-sqlite3,
+# which requires cgo, so android/arm64 builds need the Android NDK bionic
+# toolchain (the result links against /system/bin/linker64 and runs natively
+# under Termux, Android 7.0 / API 24+). agentctl has no on-device cgo usage, so
+# it builds CGO_ENABLED=0 like the other remote helpers. Point ANDROID_NDK_HOME
+# (or ANDROID_NDK_ROOT) at an installed NDK r21+; see
+# docs/public/android-termux.md for the full Termux setup guide.
+#
+ANDROID_NDK_HOME ?= $(ANDROID_NDK_ROOT)
+ANDROID_API ?= 24
+ifneq ($(ANDROID_NDK_HOME),)
+NDK_BIN_DIR := $(firstword $(wildcard $(ANDROID_NDK_HOME)/toolchains/llvm/prebuilt/*/bin))
+endif
+ANDROID_CC := $(NDK_BIN_DIR)/aarch64-linux-android$(ANDROID_API)-clang
+
+## Build kandev for android/arm64 (Termux). Requires ANDROID_NDK_HOME because
+## cgo (SQLite) links against the NDK bionic toolchain.
+build-kandev-android-arm64:
+ifeq ($(ANDROID_NDK_HOME),)
+	$(error ANDROID_NDK_HOME is not set. Install the Android NDK and export ANDROID_NDK_HOME (see docs/public/android-termux.md))
+endif
+ifeq ($(NDK_BIN_DIR),)
+	$(error No NDK LLVM toolchain found under $(ANDROID_NDK_HOME)/toolchains/llvm/prebuilt/*)
+endif
+	@echo "Building kandev for android/arm64..."
+	@$(call MKDIR,$(BUILD_DIR))
+	$(CGO_LOCALE) CGO_ENABLED=1 GOOS=android GOARCH=arm64 CC="$(ANDROID_CC)" $(GO) build -trimpath $(GOFLAGS) -tags fts5 -ldflags "$(LDFLAGS)" -o $(BUILD_DIR)/kandev-android-arm64 ./cmd/kandev
+
+## Build agentctl for android/arm64 (pure Go, no NDK required)
+build-agentctl-android-arm64:
+	@echo "Building agentctl for android/arm64..."
+	@$(call MKDIR,$(BUILD_DIR))
+	CGO_ENABLED=0 GOOS=android GOARCH=arm64 $(GO) build -trimpath $(GOFLAGS) -ldflags "$(LDFLAGS)" -o $(BUILD_DIR)/agentctl-android-arm64 ./cmd/agentctl
+
 ## Build mock-agent for linux/amd64 (used by Docker E2E tests)
 build-mock-agent-linux:
 	@echo "Building mock-agent for linux/amd64..."
